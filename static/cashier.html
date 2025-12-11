@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Касса</title>
+</head>
+<body>
+<h1>Касса</h1>
+
+<label>UID карты:
+  <input type="text" id="cardUid" value="CARD123">
+</label>
+<br>
+
+<label>Сумма (рубли):
+  <input type="number" id="amountRub" value="150">
+</label>
+<br>
+
+<div>
+  <video id="video" autoplay playsinline width="320" height="240"></video>
+  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+</div>
+
+<button id="startLiveness">Начать проверку лица</button>
+<button id="pay">Оплатить</button>
+
+<div id="command"></div>
+<div id="status"></div>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const statusDiv = document.getElementById('status');
+  const commandDiv = document.getElementById('command');
+
+  let sessionId = null;
+  let commands = [];
+  let currentCmdIndex = 0;
+  let livenessToken = null;
+  let captureIntervalId = null;
+
+  async function initCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+    } catch (e) {
+      statusDiv.innerText = 'Ошибка доступа к камере: ' + e;
+    }
+  }
+
+  async function startLiveness() {
+    const cardUid = document.getElementById('cardUid').value;
+    const resp = await fetch('/api/start_liveness', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({card_uid: cardUid})
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusDiv.innerText = 'Ошибка при старте liveness: ' + JSON.stringify(data);
+      return;
+    }
+    sessionId = data.session_id;
+    commands = data.commands;
+    currentCmdIndex = 0;
+    livenessToken = null;
+    statusDiv.innerText = 'Liveness запущен';
+    showCommand();
+    captureLoop();
+  }
+
+  function showCommand() {
+    if (currentCmdIndex < commands.length) {
+      commandDiv.innerText = commands[currentCmdIndex].label;
+    } else {
+      commandDiv.innerText = 'Ожидание завершения...';
+    }
+  }
+
+  function captureLoop() {
+    if (captureIntervalId) {
+      clearInterval(captureIntervalId);
+    }
+    let frameIndex = 0;
+    captureIntervalId = setInterval(async () => {
+      if (currentCmdIndex >= commands.length) {
+        clearInterval(captureIntervalId);
+        await finishLiveness();
+        return;
+      }
+      const cmd = commands[currentCmdIndex];
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const b64 = canvas.toDataURL('image/jpeg', 0.8);
+
+      const resp = await fetch('/api/liveness_frame', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          session_id: sessionId,
+          command_id: cmd.id,
+          frame_index: frameIndex++,
+          image_base64: b64
+        })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        statusDiv.innerText = 'Ошибка кадра liveness: ' + JSON.stringify(data);
+        clearInterval(captureIntervalId);
+        return;
+      }
+
+      if (data.command_status === 'PASSED') {
+        currentCmdIndex++;
+        showCommand();
+      }
+
+      if (data.overall_status === 'FAILED') {
+        statusDiv.innerText = 'Liveness провален: ' + (data.reason || '');
+        clearInterval(captureIntervalId);
+      }
+    }, 700);
+  }
+
+  async function finishLiveness() {
+    const resp = await fetch('/api/finish_liveness', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: sessionId})
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.status !== 'PASSED') {
+      statusDiv.innerText = 'Liveness не пройден: ' + JSON.stringify(data);
+      return;
+    }
+    livenessToken = data.liveness_token;
+    statusDiv.innerText = 'Liveness пройден, token=' + livenessToken;
+  }
+
+  async function pay() {
+    if (!livenessToken) {
+      alert('Сначала пройди проверку личности');
+      return;
+    }
+    const cardUid = document.getElementById('cardUid').value;
+    const amountRub = parseInt(document.getElementById('amountRub').value || '0', 10);
+    const amountCents = amountRub * 100;
+
+    const resp = await fetch('/api/pay', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Cashier-Id': 'DEV_CASHIER'},
+      body: JSON.stringify({
+        card_uid: cardUid,
+        canteen_id: 1,
+        amount_cents: amountCents,
+        liveness_token: livenessToken
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusDiv.innerText = 'Ошибка оплаты: ' + JSON.stringify(data);
+      return;
+    }
+    statusDiv.innerText = 'Ответ оплаты: ' + JSON.stringify(data);
+  }
+
+  document.getElementById('startLiveness').addEventListener('click', startLiveness);
+  document.getElementById('pay').addEventListener('click', pay);
+
+  initCamera();
+</script>
+</body>
+</html>
