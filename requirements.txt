@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-multipart
+psycopg2-binary
+face-recognition
+mediapipe
+numpy
+python-dotenv
