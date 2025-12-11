@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Регистрация лица</title>
+</head>
+<body>
+<h1>Регистрация лица</h1>
+
+<label>employee_id:
+  <input type="number" id="employeeId" value="1">
+</label>
+
+<div>
+  <video id="video" autoplay playsinline width="320" height="240"></video>
+  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+</div>
+
+<button id="capture">Сделать кадр</button>
+<button id="send">Отправить на сервер</button>
+
+<div id="status"></div>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const statusDiv = document.getElementById('status');
+
+  let capturedBlobs = [];
+
+  async function initCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+    } catch (e) {
+      statusDiv.innerText = 'Ошибка доступа к камере: ' + e;
+    }
+  }
+
+  document.getElementById('capture').addEventListener('click', () => {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      capturedBlobs.push(blob);
+      statusDiv.innerText = `Кадров снято: ${capturedBlobs.length}`;
+    }, 'image/jpeg', 0.9);
+  });
+
+  document.getElementById('send').addEventListener('click', async () => {
+    const employeeId = document.getElementById('employeeId').value;
+    if (!employeeId) {
+      alert('Укажи employee_id');
+      return;
+    }
+    if (capturedBlobs.length === 0) {
+      alert('Сделай хотя бы один кадр');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('employee_id', employeeId);
+    capturedBlobs.forEach((blob, idx) => {
+      formData.append('files', blob, `frame_${idx}.jpg`);
+    });
+
+    const resp = await fetch('/api/enroll_face', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await resp.json();
+    if (resp.ok) {
+      statusDiv.innerText = 'Успех: ' + JSON.stringify(data);
+    } else {
+      statusDiv.innerText = 'Ошибка: ' + JSON.stringify(data);
+    }
+  });
+
+  initCamera();
+</script>
+</body>
+</html>
