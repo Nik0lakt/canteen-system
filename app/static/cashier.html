@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Cashier</title>
+  <style>
+    body { font-family: Arial; margin: 16px; }
+    .row { display:flex; gap:16px; }
+    video, img { width: 360px; border:1px solid #ccc; }
+    .panel { width: 420px; }
+    .hint { font-size: 18px; margin: 8px 0; }
+    pre { background:#f7f7f7; padding:8px; height: 220px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h2>Касса</h2>
+
+  <div>
+    <label>Card UID:</label>
+    <input id="cardUid" placeholder="UID карты" />
+    <button onclick="loadEmployee()">Загрузить</button>
+  </div>
+
+  <div class="row" style="margin-top:16px;">
+    <div>
+      <video id="video" autoplay playsinline></video>
+      <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+      <div style="margin-top:8px;">
+        <a href="/docs" target="_blank">Swagger /docs</a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div><b id="fio">—</b></div>
+      <img id="refPhoto" alt="Фото из базы" />
+      <div>Дотация сегодня: <span id="subsidy">—</span></div>
+      <div>Месячный лимит: <span id="monthly">—</span></div>
+      <div class="hint" id="hint">—</div>
+
+      <div style="margin-top:8px;">
+        <button onclick="startLiveness()">Старт liveness</button>
+        <button onclick="finishLiveness()">Завершить liveness</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Сумма (руб):</label>
+        <input id="amountRub" type="number" value="0" />
+        <button onclick="pay()">Оплатить</button>
+      </div>
+
+      <pre id="log"></pre>
+    </div>
+  </div>
+
+  <script src="/static/cashier.js"></script>
+</body>
+</html>
